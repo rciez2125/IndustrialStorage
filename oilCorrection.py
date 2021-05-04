@@ -4,53 +4,46 @@ import matplotlib
 import matplotlib.pyplot as plt
 from datetime import date
 import matplotlib.ticker as ticker
-import ind_output as ind
+#import ind_output as ind
 import EIAgov
 from scipy import stats
+import json
 
-def collectEIAdata(dfName, seriesNameStart, seriesNameEnd, outfileName):
-	for n in stateCodes:
-		print(n)
-		if n == 'ID':
-			ser = ['PET.M_EPC0_FPF_SID_MBBLD.M']
-		elif n == 'MI':
-			ser = ['PET.MCRFP_SMI_1.M']
-		else: 
-			ser = [seriesNameStart+n+seriesNameEnd]
-		print(ser)
+f = open('eiaToken.json') # points to json file, need an api key: https://www.eia.gov/opendata/
+tok = json.load(f)['token']
+
+def collectEIAdataOil(dfName, seriesNameStart, seriesNameEnd, outfileName, states):
+	for n in states:
+		if n == 'ID': ser = ['PET.M_EPC0_FPF_SID_MBBLD.M'] # some states have weird file names
+		elif n == 'MI': ser = ['PET.MCRFP_SMI_1.M']
+		else: ser = [seriesNameStart+n+seriesNameEnd]
 		data = EIAgov.EIAgov(tok, ser)
 		D = data.GetData()
-
-		if 'Date' in dfName:
-			dfName[n] = D[ser]
+		if 'Date' in dfName: dfName[n] = D[ser]
 		else:
 			dfName['Date'] = D.Date
 			dfName[n] = D[ser]
-
 	dfName.to_csv(outfileName)
-
-oilProdData = pd.DataFrame()
-tok = 'ba1be1ff6d258c3b793079d6fbc47131'
 
 def getData():
 	stateCodes = ['US', 'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'FL', 'ID', 'IL', 'IN', 'KS', 'KY', 'LA', 'MS', 'MO', 'MT', 'NE', 'NV', 'NM', 'NY', 'ND', 'OH', 'OK', 'PA', 'SD', 'TN', 'TX', 'UT', 'VA', 'WV', 'WY']
-	#collectEIAdata(oilProdData, 'PET.MCRFP', '1.M', 'EIA_CrudeProduction.csv') #thousand barrels per month --> convert to millions 
+	oilProdData = pd.DataFrame()
+	collectEIAdataOil(oilProdData, 'PET.MCRFP', '1.M', 'Data/EIA_CrudeProduction.csv', stateCodes) #thousand barrels per month --> convert to millions 
 	allOil = pd.read_csv('Data/EIA_CrudeProduction.csv')
 	allOil = allOil.drop(['Unnamed: 0'], axis = 1)
 	allOil.Date = pd.to_datetime(allOil.Date, format = '%Y%m')
 	allOil = allOil.sort_values(by = 'Date')
-	allOil = allOil.set_index('Date')
-	allOil = allOil*0.001 #convert from thousands to millions of barrels 
-	allOil = allOil*0.005698*1000000 # convert from millions of barrels to billion Btu 
+	allOil = allOil.set_index('Date') * 0.005698*1000 # convert from thousands of barrels to billion btu 
 	allOil = allOil.loc['2000-01-01':'2019-12-01']
 
-	tightOil = pd.read_csv('Data/US-tight-oil-production.csv') # this isn't in the api 
+	tightOil = pd.read_csv('Data/US-tight-oil-production.csv') # this isn't in the api, need to have it downloaded from 
 	tightOil = tightOil.drop(['Unnamed: 11', 'Unnamed: 12'], axis = 1)
 	tightOil.Date = pd.to_datetime(tightOil.Date)
 	tightOil = tightOil.sort_values(by = 'Date')
 	tightOil = tightOil.set_index('Date')
 	tightOil = tightOil.loc['2000-01-01':'2019-12-01']
 	return allOil, tightOil
+
 allOil, tightOil = getData()
 
 # convert data from million barrels per day to just million barrels per month 
@@ -97,12 +90,11 @@ onlyTX = [col for col in tightOil.columns if 'TX' in col]
 sharedTX = [col for col in tightOil.columns if 'TX &' in col]
 sharedTX.extend([col for col in tightOil.columns if '& TX' in col])
 onlyTX = [x for x in onlyTX if x not in sharedTX]
-print(onlyTX)
 txt = tightOil[onlyTX].sum(axis=1)
-
 ok_cols = [col for col in tightOil.columns if 'OK' in col]
 okt = tightOil[ok_cols].sum(axis=1) #no shared resources for ok 
 okr = allOil['OK'] - okt
+
 # split up the texas shared data 
 def TXshared(tx):
 	# new mexico --> shared tight oil exceeds nm total oil production 
@@ -186,19 +178,7 @@ def otherShared():
 	plt.plot(check)
 	plt.savefig('Figures/niobraracheck.png', dpi = 300)
 	return cot, cor, WYT, wyr, MTT, mtr, ndt, ndr
-
 cot, cor, wyt, wyr, mtt, mtr, ndt, ndr = otherShared()
-
-#print('Texas comp', tx/allOil.TX) # over 100%, figure out what's up 
-#print('oklahoma comp', ok/allOil.OK)
-#print((tightOil['Bakken (ND & MT)'])/(allOil.ND+ allOil.MT))
-#print('nm comp', (nm/allOil.NM).tail(36))
-#print('la comp', tightOil['Austin Chalk (LA & TX)']*0.5/allOil.LA)
-
-#print(allOil.CO, allOil.WY)
-#print((tightOil['Niobrara-Codell (CO & WY)'])/(allOil.CO+ allOil.WY))
-
-#print(tightOil[tightOil.columns[-1]]/(allOil.US-allOil.TX-allOil.OK-allOil.ND-allOil.MT-allOil.CO-allOil.WY))
 
 #load actual lease gas data:
 leaseGas = pd.read_csv('Data/EIA_LeasePlantNG.csv')
@@ -217,7 +197,7 @@ def runLeaseGasCheck(monthlyTightOil, monthlyRegularOil, stateCode):
 	plt.figure()
 	plt.plot(assumedLeaseAnnual)
 	plt.plot(leaseGas[stateCode])
-	plt.savefig('Figures/LeaseGas/'+stateCode+'leasegascheck.png', dpi = 300)
+	#plt.savefig('Figures/'+stateCode+'leasegascheck.png', dpi = 300)
 
 runLeaseGasCheck(txt, txr, 'TX')
 runLeaseGasCheck(okt, okr, 'OK')
@@ -229,50 +209,25 @@ runLeaseGasCheck(mtt, mtr, 'MT')
 runLeaseGasCheck(ndt, ndr, 'ND')
 
 tightOilStates = ['TX', 'OK', 'NM', 'LA', 'CO', 'WY', 'MT', 'ND']
-
-print(allOil.columns)
-
-
 avgUSEROI = np.average((550,100,100,1.5,11.25,4.5,95,11,250))
-print(avgUSEROI)
 
 oilPetroleumConsumed = pd.DataFrame(index = allOil.index)
 for n in allOil.columns:
 	if n in tightOilStates:
-		if n == 'TX':
-			oilPetroleumConsumed[n] = txt*0.001 + txr/avgUSEROI
-		elif n == 'OK':
-			oilPetroleumConsumed[n] = okt*0.001 + okr/avgUSEROI
-		elif n == 'NM':
-			oilPetroleumConsumed[n] = nmt*0.001 + nmr/avgUSEROI
-		elif n == 'LA':
-			oilPetroleumConsumed[n] = lat*0.001 + lar/avgUSEROI
-		elif n == 'CO':
-			oilPetroleumConsumed[n] = cot*0.001 + cor/avgUSEROI
-		elif n == 'WY':
-			oilPetroleumConsumed[n] = wyt*0.001 + wyr/avgUSEROI
-		elif n == 'MT':
-			oilPetroleumConsumed[n] = mtt*0.001 + mtr/avgUSEROI
-		else:
-			oilPetroleumConsumed[n] = ndt*0.001 + ndr/avgUSEROI
-	elif n == 'AK':
-		oilPetroleumConsumed[n] = allOil[n]/80 #ANS average
-	else:
-		oilPetroleumConsumed[n]= allOil[n]/avgUSEROI #not sure about this, 
+		if n == 'TX': oilPetroleumConsumed[n] = txt*0.001 + txr/avgUSEROI
+		elif n == 'OK': oilPetroleumConsumed[n] = okt*0.001 + okr/avgUSEROI
+		elif n == 'NM': oilPetroleumConsumed[n] = nmt*0.001 + nmr/avgUSEROI
+		elif n == 'LA': oilPetroleumConsumed[n] = lat*0.001 + lar/avgUSEROI
+		elif n == 'CO': oilPetroleumConsumed[n] = cot*0.001 + cor/avgUSEROI
+		elif n == 'WY': oilPetroleumConsumed[n] = wyt*0.001 + wyr/avgUSEROI
+		elif n == 'MT': oilPetroleumConsumed[n] = mtt*0.001 + mtr/avgUSEROI
+		else: oilPetroleumConsumed[n] = ndt*0.001 + ndr/avgUSEROI
+	elif n == 'AK': oilPetroleumConsumed[n] = allOil[n]/80 #ANS average
+	else: oilPetroleumConsumed[n]= allOil[n]/avgUSEROI 
 
-print(oilPetroleumConsumed['NM'])
 
 oilPetroleumConsumed = oilPetroleumConsumed.drop('US', axis = 1)
 oilPetroleumConsumed.insert(0, 'US', oilPetroleumConsumed.sum(axis = 1)) 
-print(oilPetroleumConsumed)
 oilPetroleumConsumed.to_csv('Data/OilDieselConsumptionMonthly.csv')
-
 oilPetroleumConsumedAnnual = monthlyToAnnual(oilPetroleumConsumed)
 oilPetroleumConsumedAnnual.to_csv('Data/OilDieselConsumptionAnnual.csv')
-
-# calculate the amount of non-tight oil per state
-
-# calculate the energy consumption for non-tight oil
-
-# calculate the non-lease gas energy consumption for tight oil
-

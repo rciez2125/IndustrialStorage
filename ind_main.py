@@ -1,3 +1,7 @@
+# this script loads cleaned up EIA, gdp, and manufacturing utilization data to analyze state-level trends
+# to use it correctly, run the "loadEIAdata" script, the "oilCorrection" script to remove oil drilling energy consumption
+# and  ensure that GDP data and FRED data for capacity utilization are available
+
 import pandas as pd
 import numpy as np
 import matplotlib
