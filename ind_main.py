@@ -294,6 +294,54 @@ def plotStateConsumptionvCapacity(bigStateCodes, overall_cap, monthly_energy, e,
     plt.savefig('Figures/Fig3_SI2.png', dpi=300)
     plt.close()
 
+def plotStateConsumptionvCapacityPresentation(bigStateCodes, overall_cap, monthly_energy, e, C):
+    plt.figure(figsize = (8.5, 4.5))
+    fig1, ax = plt.subplots()
+    for q in range(12): 
+        state = bigStateCodes[q]
+        
+        if q < 1: h = .1*6
+        elif q < 2: h = .1*4
+        elif q < 4: h = 2*.1
+        else: h = 0.1
+        
+        plt.subplot(position = [0.12+(q%6)*0.147, 0.33-(q//6)*0.17, 0.12, h])
+        z = (overall_cap[state].loc['2014-01-01':'2018-12-01'] - np.mean(overall_cap[state].loc['2014-01-01':'2018-12-01']))#/np.std(overall_cap[state].loc['2014-01-01':'2018-12-01'])
+        l2 = stats.linregress(x=z, y = monthly_energy[state].loc['2014-01-01':'2018-12-01'])
+        linpred = l2.intercept + l2.slope*(np.linspace(50,100,10)-np.mean(overall_cap[state].loc['2014-01-01':'2018-01-01']))#/np.std(overall_cap[state].loc['2014-01-01':'2018-01-01'])
+        plt.plot((np.linspace(50,100,10)-np.mean(overall_cap[state].loc['2014-01-01':'2018-01-01'])), linpred, '-', color = C)
+        plt.scatter(((overall_cap[state].loc['2014-01-01':'2018-12-01']-np.mean(overall_cap[state].loc['2014-01-01':'2018-01-01']))), monthly_energy[state].loc['2014-01-01':'2018-12-01'], color = C, s = 1)
+
+        l4 = LinearRegression().fit(z.to_numpy().reshape(-1,1), monthly_energy[state].loc['2014-01-01':'2018-12-01'].to_numpy().reshape(-1,1))
+        y_pred = l4.predict(z.to_numpy().reshape(-1,1))
+        mse = sum((monthly_energy[state].loc['2014-01-01':'2018-12-01'].to_numpy().reshape(-1,1) - y_pred)**2)/60
+        z2 = np.linspace(50,100,10)-np.mean(overall_cap[state].loc['2014-01-01':'2018-01-01'])
+        b2 = np.sqrt(mse*(1+(1/60)+((z2**2)/sum(z2**2))))
+        y_pred2 = l4.predict(z2.reshape(-1,1))
+
+        plt.fill_between(z2, np.concatenate(y_pred2 - 1.96*b2.reshape((10,1))), np.concatenate(y_pred2 + 1.96*b2.reshape((10,1))), color = C, alpha = 0.5)
+        plt.title(bigStateCodes[q], fontsize = 14, pad = 0.5)
+        plt.xlim(-10,10)
+
+        plt.ylim(bottom = 0)
+        if q >5: plt.xticks(fontsize = 14, rotation = 90)
+        else: plt.xticks([-10, 0, 10], labels = ('', '', ''))
+        if q == 0: 
+        	plt.yticks([0, 100000, 200000, 300000, 400000, 500000,600000], labels = ('0', ' ', '200', '', '400','', '600'), fontsize = 14)
+        	plt.ylim(0, 600000)
+        elif q == 1: plt.yticks([0, 100000, 200000, 300000, 400000], labels = (' ', ' ', ' ', ' ', ' '), fontsize = 8)
+        elif q<4: plt.yticks([0, 100000, 200000], labels = (' ', ' ', ' '), fontsize = 14)
+        else: plt.yticks([0, 100000], labels = (' ', ' '), fontsize = 14)
+        if q == 6: 
+        	plt.yticks([0, 100000], labels = ('0', '100'), fontsize = 14)
+        	plt.ylabel('                                                        Monthly Estimated Energy Consumption [Trillion Btu]', fontsize = 12)
+        elif q==7: plt.xlabel('                                     Manufacturing Capacity Utilization', fontsize = 14)
+        if q < 10: plt.text(-4, 8000, str(np.round(np.mean(overall_cap[state].loc['2014-01-01':'2018-12-01']),1))+'%', fontsize = 10)
+        else: plt.text(-5, 60000,  str(np.round(np.mean(overall_cap[state].loc['2014-01-01':'2018-12-01']),1))+'%', fontsize = 10)
+
+    plt.savefig('Figures/Fig3Presentation.png', dpi=300)
+    plt.close()
+
 def plotData(assumptions):
 	#Gets EIA data
     monthly_energy, monthlyPercent, quarterlyPercent, e = energy_process(assumptions)
@@ -344,6 +392,7 @@ def plotData(assumptions):
     bigStateCodes = z.keys()
 
     plotStateConsumptionvCapacity(bigStateCodes, overall_cap, monthly_energy, e, 'C0')
+    plotStateConsumptionvCapacityPresentation(bigStateCodes, overall_cap, monthly_energy, e, 'C0')
 
     plt.figure()
     for s in range(len(bigStateCodes)):
@@ -355,6 +404,39 @@ def plotData(assumptions):
     	plt.title(bigStateCodes[s])
     plt.savefig('Figures/StateOutput.png', dpi = 300)
     plt.close()
+
+    plt.figure(figsize = (11.5, 4.5))
+    plt.subplot(position = [0.1, 0.11, 0.85, 0.83])
+    E= e.loc['2018-01-01'].nsmallest(52)
+    M, Q = monthlyPercent[E.index], quarterlyPercent[E.index]
+    E = E.drop(labels = 'US')
+    Erev = E.iloc[::-1]
+    plt.bar(Erev.index, Erev)
+    plt.xlim(-0.5, 51); plt.xticks(fontsize = 14, rotation = 90)
+    plt.ylim(0, 7000000); plt.yticks([0, 2000000, 4000000, 6000000], labels = ['0', '2000', '4000', '6000'], fontsize = 14)
+    plt.ylabel('Total Manufacturing Energy\nConsumption [Trillion Btu]', fontsize = 14)
+    plt.savefig("Figures/PresentationFig2A.png", dpi = 300)
+    plt.close()
+
+    plt.figure(figsize = (11.5, 4.5))
+    plt.subplot(position = [0.09, 0.11, 0.8, 0.83])
+    m_us, q_us = M.US.loc['2018-01-01'], Q.US.loc['2018-01-01']
+    M = M.drop(columns = 'US', axis = 1); Q = Q.drop(columns = 'US', axis = 1)
+    Mrev = M[M.columns[::-1]]
+    Qrev = Q[Q.columns[::-1]]
+    plt.bar(Mrev.columns, Mrev.loc['2018-01-01'], color = 'C2')
+    plt.bar(Qrev.columns, Qrev.loc['2018-01-01'], bottom = Mrev.loc['2018-01-01'], color = 'C1')
+    plt.plot([-1, 52], [m_us, m_us], '-', color = 'C2', alpha = 0.5)
+    plt.xticks(fontsize = 14, rotation =90);
+    plt.plot([-1, 52], [q_us + m_us, q_us + m_us], '-', color = 'C1', alpha = 0.5)
+    plt.yticks([0, 0.25, 0.5, 0.75, 1], labels = ('0', '25%', '50%', '75%', '100%'), fontsize = 14)
+    plt.text(51.5, m_us, 'US Monthly\nAverage', color = 'C2', fontsize = 14, horizontalalignment = 'left', verticalalignment='top')
+    plt.text(51.5, q_us + m_us, 'US Monthly\n+Quarterly\nAverage', color = 'C1', fontsize = 14)
+    plt.xlim(-0.5, 51); plt.ylim(0,1)
+    plt.ylabel('Percentage', fontsize = 14)
+    plt.savefig("Figures/PresentationFig2B.png", dpi=300)
+    plt.close()
+
 
 def monthlyToAnnual(d):
 	da = pd.DataFrame()
@@ -496,7 +578,138 @@ def compareToTotalElec(assumptions):
     plt.xlabel('State', fontsize = 8)
     plt.savefig('Figures/Fig4.png', dpi = 300)
 
+
+def compareToTotalElecPresentation(assumptions):
+    allElec = readEnergyData('Data/EIA_MonthlyElecSales.csv', '%Y%m')
+    allElec = allElec*3.412 # convert to Btu
+
+    monthly_energy, monthlyPercent, quarterlyPercent, e = energy_process(assumptions)
+    b = e.drop(columns = 'US', axis = 1)
+    x = 100*b.loc['2018-01-01']/e.US.loc['2018-01-01']
+    y = x.where(x>1).dropna()
+    z = y.nlargest(12)
+    bigStateCodes = z.keys()
+    overall_cap = pd.read_csv('Data/StateCapacityUtilization.csv')
+    overall_cap.DATE = pd.to_datetime(overall_cap.DATE, format = '%Y-%m-%d')
+    overall_cap = overall_cap.set_index('DATE')
+    overall_cap = overall_cap.loc['2001-01-01':'2018-12-01']
+    allElec = allElec.loc['2014-01-01':'2018-12-01']
+
+    o = overall_cap.loc['2014-01-01':'2018-12-01']
+    m = monthly_energy.loc['2014-01-01':'2018-12-01']
+
+    plt.figure(figsize = (8.5,4))
+    plt.subplot(position = [0.1, 0.1, 0.85, 0.85])
+
+    plt.plot([-10, -10], [2, 2], color = 'C0')
+    plt.plot([-10, -10], [2, 2], color = 'C1')
+    plt.plot([-10, -10], [2, 2], color = 'C2')
+    
+    C0_dict =  {'patch_artist': True,
+             'boxprops': dict(color='C0', facecolor='w'),
+             'capprops': dict(color='C0'),
+             'flierprops': dict(color='C0', markeredgecolor='C0'),
+             'medianprops': dict(color='C0'),
+             'whiskerprops': dict(color='C0')}
+
+    C1_dict =  {'patch_artist': True,
+             'boxprops': dict(color='C1', facecolor='w'),
+             'capprops': dict(color='C1'),
+             'flierprops': dict(color='C1', markeredgecolor='C1'),
+             'medianprops': dict(color='C1'),
+             'whiskerprops': dict(color='C1')}
+
+    plt.boxplot(allElec[bigStateCodes], **C0_dict)
+    plt.boxplot(m[bigStateCodes], **C1_dict)
+    elec_data = np.empty((len(bigStateCodes),3))
+    ind_data=np.empty((len(bigStateCodes),3))
+    for n in range(len(bigStateCodes)):
+        state = bigStateCodes[n]
+        z = (o[state] - np.mean(o[state]))
+
+        l4 = LinearRegression().fit(z.to_numpy().reshape(-1,1), m[state].to_numpy().reshape(-1,1))
+        
+        y_pred = l4.predict(z.to_numpy().reshape(-1,1))
+        mse = sum((m[state].to_numpy().reshape(-1,1) - y_pred)**2)/60
+        se = np.sqrt((1-l4.score(z.to_numpy().reshape(-1,1), m[state].to_numpy().reshape(-1,1))**2)/(12*5-2))
+        a = np.sqrt((1/60)+((z**2)/sum(z**2)))
+
+        ci_upper = y_pred + 2*se*a.values.reshape((60,1))
+        ci_lower = y_pred - 2*se*a.values.reshape((60,1))
+        b = np.sqrt(mse*(1+(1/60)+((z**2)/sum(z**2))))
+        pi_upper = y_pred + 1.96*b.values.reshape((60,1))
+        pi_lower = y_pred - 1.96*b.values.reshape((60,1))
+
+        z2 = np.array([1])
+        print(mse)
+        b2 = np.sqrt(mse*(1+(1/60)+(1)))
+        y_pred2 = l4.predict(z2.reshape(-1,1))
+        pi2_upper = y_pred2 + 1.96*b2.reshape((1,1))
+        pi2_lower = y_pred2 - 1.96*b2.reshape((1,1))
+        print(y_pred2, pi2_upper, pi2_lower)
+
+        l2 = stats.linregress(x=z, y = m[state])
+        #print(l2.intercept, l2.slope, l2.stderr, l2.intercept_stderr)
+
+        #l2 = stats.linregress(x=z, y = m[state])
+        #plt.plot([n+1], [10*l2.slope/np.std(o[state])], 'x')
+        plt.plot([n+1], 10*l4.coef_, '.', color = 'C2')
+
+        tval = 1.96
+        plt.plot([n+1, n+1], [10*(l2.slope+tval*l2.stderr), 10*(l2.slope-tval*l2.stderr)], '-', color = 'C2')
+        t = 0.05
+
+        plt.plot([n+1+t, n+1-t], [10*(l2.slope-tval*l2.stderr), 10*(l2.slope-tval*l2.stderr)], '-', color = 'C2')
+        plt.plot([n+1+t, n+1-t], [10*(l2.slope+tval*l2.stderr), 10*(l2.slope+tval*l2.stderr)], '-', color = 'C2')
+        plt.plot([-10, 20], [0, 0], '-k')
+
+        
+        #print(state, 'elec', 1000*(l4.coef_)/np.mean(allElec[state]), 1000*(l2.slope-tval*l2.stderr)/np.percentile(allElec[state], 97.5), 1000*(l2.slope+tval*l2.stderr)/np.percentile(allElec[state], 2.5), 'ind energy', 1000*l4.coef_/np.mean(m[state]), 1000*(l2.slope-tval*l2.stderr)/np.percentile(m[state], 97.5), 1000*(l2.slope+tval*l2.stderr)/np.percentile(m[state], 2.5))
+        elec_data[n,0] = 1000*(l4.coef_)/np.mean(allElec[state])
+        elec_data[n,1] = 1000*(l2.slope-tval*l2.stderr)/np.percentile(allElec[state], 2.5)
+        elec_data[n,2] = 1000*(l2.slope+tval*l2.stderr)/np.percentile(allElec[state], 97.5)
+
+        ind_data[n,0] = 1000*l4.coef_/np.mean(m[state])
+        ind_data[n,1] = 1000*(l2.slope-tval*l2.stderr)/np.percentile(m[state], 2.5)
+        ind_data[n,2] = 1000*(l2.slope+tval*l2.stderr)/np.percentile(m[state], 97.5)
+
+    plt.legend(labels = ('Monthly Electricity', 'Monthly Industrial Energy', '10% Change in Capacity Utilization'), fontsize = 14, loc = 'upper center')
+    plt.xticks(range(1, len(bigStateCodes)+1), labels = bigStateCodes)
+    plt.xlim(0.5, len(bigStateCodes)+.5)
+    plt.ylim(-10000, 550000)
+    plt.yticks([0, 100000, 200000, 300000, 400000, 500000], labels = ('0', '100', '200', '300', '400', '500'), fontsize = 14)
+    plt.xticks(fontsize = 14)
+   
+    plt.ylabel('Monthly Energy [trillion Btu]', fontsize = 14)
+    plt.savefig('Figures/Fig4APresentation.png', dpi = 300)
+    plt.clf()
+
+    plt.figure(figsize = (8.5,4))
+    plt.subplot(position = [0.1, 0.1, 0.85, 0.85])
+    width = 0.35
+    export_percentage = pd.DataFrame(data = elec_data, columns = ('Elec-base', 'Elec-low', 'Elec-high'), index = bigStateCodes)
+    export_percentage['Ind-base'] = ind_data[:,0]
+    export_percentage['Ind-low'] = ind_data[:,1]
+    export_percentage['Ind-high'] = ind_data[:,2]
+    export_percentage.to_csv('PercentageTable.csv')
+
+    elec_data[:,1] = elec_data[:,0]-elec_data[:,1]
+    elec_data[:,2] = elec_data[:,2]-elec_data[:,0]
+    ind = np.arange(len(elec_data))
+    ind_data[:,1] = ind_data[:,0]-ind_data[:,1]
+    ind_data[:,2] = ind_data[:,2]-ind_data[:,0]
+    rects1 = plt.bar(ind - width/2, elec_data[:,0], width, yerr = elec_data[:,1:3].T)
+    rects2 = plt.bar(ind + width/2, ind_data[:,0], width, yerr = ind_data[:,1:3].T)
+    plt.xlim(-0.5, len(bigStateCodes)-0.5)
+    plt.xticks(range(0, len(bigStateCodes)), labels = bigStateCodes, fontsize = 14)
+    plt.yticks(fontsize = 14)
+    plt.yticks([-25, 0, 25, 50, 75, 100, 125, 150], fontsize = 14)
+    plt.ylim(-40, 160)
+    plt.legend(('Monthly Electricity', 'Monthly Industrial Energy'), loc = 'upper left', fontsize = 14)
+    plt.ylabel('Percentage of Monthly Energy', fontsize = 8)
+    plt.savefig('Figures/Fig4BPresentation.png', dpi = 300)
 # define extra assumptions about data
-scenario = 'none'
+scenario = 'none' #none = no extra data interpolation from national-level trends
 plotData(scenario)
 compareToTotalElec(scenario)
+compareToTotalElecPresentation(scenario)
